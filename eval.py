@@ -6,6 +6,20 @@ from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 from decord import VideoReader, cpu
 from fire import Fire
 
+def determine_channel_axis(array):
+    """
+    Determine the channel axis of a given image or video frame.
+    :param array: Input array with shape (H, W, C) or (C, H, W).
+    :return: Channel axis (integer).
+    """
+    shape = array.shape
+    if len(shape) == 3:  # Single frame (H, W, C) or (C, H, W)
+        if shape[2] in [1, 3]:  # Check if last dim is channel
+            return -1  # Channel is last
+        elif shape[0] in [1, 3]:  # Check if first dim is channel
+            return 0  # Channel is first
+    raise ValueError("Unable to determine channel axis from array shape.")
+
 def evaluate_video_quality(original, noisy):
     """
     Evaluate the quality of the noisy video compared to the original.
@@ -15,13 +29,16 @@ def evaluate_video_quality(original, noisy):
     """
     psnr_values = []
     ssim_values = []
+    num_frames = min(original.shape[0], noisy.shape[0])
 
-    for i in range(original.shape[0]):
+    for i in range(num_frames):
         orig_frame = original[i]
         noisy_frame = noisy[i]
 
+        channel_axis = determine_channel_axis(orig_frame)
+
         psnr = peak_signal_noise_ratio(orig_frame, noisy_frame, data_range=255)
-        ssim = structural_similarity(orig_frame, noisy_frame, multichannel=True)
+        ssim = structural_similarity(orig_frame, noisy_frame, multichannel=True, channel_axis=channel_axis)
 
         psnr_values.append(psnr)
         ssim_values.append(ssim)
@@ -59,7 +76,7 @@ def load_latent(latent_path):
     :return: Torch tensor containing the latent representation.
     """
     latent = torch.load(latent_path)
-    return latent
+    return latent.float() # avoid half in cpu
 
 def main(original_video_dir, noisy_video_dir, original_latent_dir, noisy_latent_dir, latent_video_dir, noisy_latent_video_dir):
     """
@@ -78,14 +95,15 @@ def main(original_video_dir, noisy_video_dir, original_latent_dir, noisy_latent_
             continue
 
         # Construct file paths
+        base_name, ext = os.path.splitext(video_file)
         original_video_path = os.path.join(original_video_dir, video_file)
         noisy_video_path = os.path.join(noisy_video_dir, video_file)
-        latent_video_path = os.path.join(latent_video_dir, video_file)
-        noisy_latent_video_path = os.path.join(noisy_latent_video_dir, video_file)
+        latent_video_path = os.path.join(latent_video_dir, f"{base_name}_latent{ext}")
+        noisy_latent_video_path = os.path.join(noisy_latent_video_dir, f"{base_name}_latent{ext}")
 
         # Latent file paths
-        original_latent_path = os.path.join(original_latent_dir, video_file.replace('.mp4', '.pt'))
-        noisy_latent_path = os.path.join(noisy_latent_dir, video_file.replace('.mp4', '.pt'))
+        original_latent_path = os.path.join(original_latent_dir, f"{base_name}_latent.pt")
+        noisy_latent_path = os.path.join(noisy_latent_dir, f"{base_name}_latent.pt")
 
         try:
             # Load videos
