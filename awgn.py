@@ -34,8 +34,8 @@ def simulate_latent_awgn(latent_dir, output_dir, snr_db):
             continue
 
         latent_path = os.path.join(latent_dir, latent_file)
-        latent = torch.load(latent_path)
-        noisy_latent = add_awgn(latent, snr_db)
+        latent = torch.load(latent_path).float() # pytorch does not support float sqrt in cpu
+        noisy_latent = add_awgn(latent, snr_db).half() # float -> half
 
         noisy_latent_path = os.path.join(output_dir, latent_file)
         torch.save(noisy_latent, noisy_latent_path)
@@ -62,6 +62,7 @@ def simulate_video_awgn(video_dir, output_dir, snr_db):
 
         video = rearrange(torch.tensor(video), 't h w c -> t c h w')
         video = video / 127.5 - 1.0  # Normalize to [-1, 1]
+        video.float() # pytorch does not support float sqrt in cpu
         noisy_video = add_awgn(video, snr_db)
         noisy_video = (torch.clamp(noisy_video, -1.0, 1.0) + 1.0) * 127.5
         noisy_video = noisy_video.to('cpu', dtype=torch.uint8)
