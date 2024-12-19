@@ -1,3 +1,4 @@
+import os
 import torch
 import numpy as np
 import cv2
@@ -26,7 +27,6 @@ def evaluate_video_quality(original, noisy):
         ssim_values.append(ssim)
 
     return np.mean(psnr_values), np.mean(ssim_values)
-
 
 def evaluate_latent_quality(original_latent, noisy_latent):
     """
@@ -61,26 +61,67 @@ def load_latent(latent_path):
     latent = torch.load(latent_path)
     return latent
 
-def main(original_video_path,noisy_video_path,original_latent_path,noisy_latent_path):
+def main(original_video_dir, noisy_video_dir, original_latent_dir, noisy_latent_dir, latent_video_dir, noisy_latent_video_dir):
     """
-    Evaluatation
-    :param original_video_path: Directory containing the original video.
-    :param noisy_video_path: Directory containing the noisy video.
-    :param original_latent_path: Directory containing the latent of the video.
-    :param noisy_latent_path: Directory containing the noisy latent of the video.
+    Evaluation
+    :param original_video_dir: Directory containing the original videos.
+    :param noisy_video_dir: Directory containing the noisy videos.
+    :param original_latent_dir: Directory containing the latents of the videos.
+    :param noisy_latent_dir: Directory containing the noisy latents of the videos.
+    :param latent_video_dir: Directory containing videos generated from latents.
+    :param noisy_latent_video_dir: Directory containing noisy videos generated from latents.
     """
-    original_video = load_video_as_numpy(original_video_path)  # 原始视频加载为 NumPy 数组 (T, H, W, C)
-    noisy_video = load_video_as_numpy(noisy_video_path)     # 加噪后的视频加载为 NumPy 数组 (T, H, W, C)
-    original_latent = load_latent(original_latent_path) # 原始潜在变量加载为 Torch 张量
-    noisy_latent = load_latent(noisy_latent_path)    # 加噪后的潜在变量加载为 Torch 张量
+    # Iterate over all files in the original video directory
+    for video_file in os.listdir(original_video_dir):
+        if not video_file.lower().endswith(('.mp4', '.avi', '.mkv', '.mov')):
+            print(f"Skipping non-video file: {video_file}")
+            continue
 
-    # 视频质量评估
-    video_psnr, video_ssim = evaluate_video_quality(original_video, noisy_video)
-    print(f"Video PSNR: {video_psnr:.2f}, SSIM: {video_ssim:.3f}")
+        # Construct file paths
+        original_video_path = os.path.join(original_video_dir, video_file)
+        noisy_video_path = os.path.join(noisy_video_dir, video_file)
+        latent_video_path = os.path.join(latent_video_dir, video_file)
+        noisy_latent_video_path = os.path.join(noisy_latent_video_dir, video_file)
 
-    # 潜在变量质量评估
-    latent_mse, latent_cosine = evaluate_latent_quality(original_latent, noisy_latent)
-    print(f"Latent MSE: {latent_mse:.6f}, Cosine Similarity: {latent_cosine:.3f}")
+        # Latent file paths
+        original_latent_path = os.path.join(original_latent_dir, video_file.replace('.mp4', '.pt'))
+        noisy_latent_path = os.path.join(noisy_latent_dir, video_file.replace('.mp4', '.pt'))
+
+        try:
+            # Load videos
+            original_video = load_video_as_numpy(original_video_path)
+            noisy_video = load_video_as_numpy(noisy_video_path)
+            latent_video = load_video_as_numpy(latent_video_path)
+            noisy_latent_video = load_video_as_numpy(noisy_latent_video_path)
+
+            # Load latents
+            original_latent = load_latent(original_latent_path)
+            noisy_latent = load_latent(noisy_latent_path)
+
+            # Video quality evaluation
+                # Origin vs Latent
+            video_psnr, video_ssim = evaluate_video_quality(original_video, latent_video)
+            print(f"[{video_file}] | Origin vs latent | Video PSNR: {video_psnr:.2f}, SSIM: {video_ssim:.3f}")
+
+                # Origin vs Noisy
+            video_psnr, video_ssim = evaluate_video_quality(original_video, noisy_video)
+            print(f"[{video_file}] | Origin vs Noisy | Video PSNR: {video_psnr:.2f}, SSIM: {video_ssim:.3f}")
+
+                # Origin vs Noisy_latent
+            video_psnr, video_ssim = evaluate_video_quality(original_video, noisy_latent_video)
+            print(f"[{video_file}] | Origin vs Noisy latent | Video PSNR: {video_psnr:.2f}, SSIM: {video_ssim:.3f}")
+
+                # Noisy vs Noisy_latent (may unnecessary)
+            video_psnr, video_ssim = evaluate_video_quality(noisy_video, noisy_latent_video)
+            print(f"[{video_file}] | Noisy vs Noisy latent | Video PSNR: {video_psnr:.2f}, SSIM: {video_ssim:.3f}")
+
+
+            # Latent quality evaluation
+            latent_mse, latent_cosine = evaluate_latent_quality(original_latent, noisy_latent)
+            print(f"[{video_file}] Latent MSE: {latent_mse:.6f}, Cosine Similarity: {latent_cosine:.3f}")
+
+        except Exception as e:
+            print(f"Error processing {video_file}: {e}")
 
 if __name__ == '__main__':
     Fire(main)
